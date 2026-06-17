@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/weekly-ipacky-export",
+      "schedule": "0 13 * * 3"
+    }
+  ]
+}
