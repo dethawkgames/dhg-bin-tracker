@@ -108,17 +108,23 @@ function SearchView({ bins }) {
 
   const debouncedQuery = useDebounce(query, 200);
 
-  const results = [];
+  const grouped = {}; // productId -> { title, image, locations: [{binNumber, quantity}], totalQty }
   if (debouncedQuery.trim().length >= 2) {
     const q = debouncedQuery.trim().toLowerCase();
     for (const [binNumber, items] of Object.entries(bins)) {
       for (const item of items) {
         if (item.title.toLowerCase().includes(q)) {
-          results.push({ ...item, binNumber });
+          const key = item.productId;
+          if (!grouped[key]) {
+            grouped[key] = { title: item.title, image: item.image, sku: item.sku, locations: [], totalQty: 0 };
+          }
+          grouped[key].locations.push({ binNumber, quantity: item.quantity });
+          grouped[key].totalQty += item.quantity;
         }
       }
     }
   }
+  const results = Object.values(grouped);
 
   async function checkOpenOrders(productId, title) {
     setCheckingOrders(true);
@@ -156,14 +162,27 @@ function SearchView({ bins }) {
       {results.length > 0 && (
         <div className="result-list">
           {results.map((r, i) => (
-            <div className="result-card" key={i}>
+            <div className="result-card multi" key={i}>
               {r.image && <img src={r.image} alt="" className="result-thumb" />}
               <div className="result-info">
                 <div className="result-title">{r.title}</div>
                 <div className="result-meta">
-                  <span className="bin-pill">Bin {r.binNumber}</span>
-                  <span className="qty-pill">×{r.quantity}</span>
+                  {r.locations
+                    .sort((a, b) => {
+                      if (a.binNumber === 'shelf') return 1;
+                      if (b.binNumber === 'shelf') return -1;
+                      return parseInt(a.binNumber) - parseInt(b.binNumber);
+                    })
+                    .map((loc, j) => (
+                      <span className="bin-loc-pill" key={j}>
+                        <span className="bin-pill">{loc.binNumber === 'shelf' ? 'Shelf' : `Bin ${loc.binNumber}`}</span>
+                        <span className="qty-pill">×{loc.quantity}</span>
+                      </span>
+                    ))}
                 </div>
+                {r.locations.length > 1 && (
+                  <div className="result-total">Total: {r.totalQty} across {r.locations.length} locations</div>
+                )}
               </div>
             </div>
           ))}
@@ -268,12 +287,13 @@ function BrowseView({ bins, saveBins }) {
 
   if (selectedBin) {
     const items = bins[selectedBin] || [];
+    const displayName = selectedBin === 'shelf' ? 'Shelf' : `Bin ${selectedBin}`;
     return (
       <div className="view">
         <button className="back-btn" onClick={() => setSelectedBin(null)}>← All bins</button>
-        <h2 className="bin-detail-title">Bin {selectedBin}</h2>
+        <h2 className="bin-detail-title">{displayName}</h2>
         {items.length === 0 ? (
-          <p className="empty-state">This bin is empty.</p>
+          <p className="empty-state">{selectedBin === 'shelf' ? 'The shelf is empty.' : 'This bin is empty.'}</p>
         ) : (
           <div className="bin-items-list">
             {items.map((item, i) => (
@@ -298,9 +318,17 @@ function BrowseView({ bins, saveBins }) {
     );
   }
 
+  const shelfItems = bins['shelf'] || [];
+
   return (
     <div className="view">
       <p className="view-subtitle">{usedBins.size} of 42 bins in use</p>
+
+      <button className="shelf-tile" onClick={() => setSelectedBin('shelf')}>
+        <span className="shelf-tile-label">Shelf</span>
+        <span className="shelf-tile-count">{shelfItems.length} item{shelfItems.length === 1 ? '' : 's'}</span>
+      </button>
+
       <div className="bin-grid">
         {binNumbers.map(num => {
           const items = bins[num] || [];
@@ -418,15 +446,24 @@ function AddView({ bins, saveBins, onDone }) {
             <button className="remove-btn" onClick={() => setSelectedProduct(null)}><X size={16} /></button>
           </div>
 
-          <label className="form-label">Bin number</label>
+          <label className="form-label">Bin number (or "shelf")</label>
           <input
             type="text"
             className="form-input"
-            placeholder="e.g. 23"
+            placeholder="e.g. 23 or shelf"
             value={binNumber}
-            onChange={e => setBinNumber(e.target.value.replace(/[^0-9]/g, ''))}
+            onChange={e => {
+              const v = e.target.value;
+              const cleaned = v.replace(/[^0-9a-zA-Z]/g, '');
+              if (/^[0-9]*$/.test(cleaned)) {
+                setBinNumber(cleaned);
+              } else if ('shelf'.startsWith(cleaned.toLowerCase())) {
+                setBinNumber(cleaned.toLowerCase());
+              }
+            }}
             autoFocus
           />
+          <p className="form-hint">Type a bin number, or type "shelf" for overstock storage.</p>
 
           <label className="form-label">Quantity</label>
           <div className="qty-controls qty-controls-large">
@@ -677,6 +714,54 @@ function GlobalStyles() {
       .order-check-result.error { color: var(--red); }
       .order-check-result ul { margin: 8px 0 0; padding-left: 18px; }
       .order-check-result li { margin-bottom: 4px; }
+
+      .result-card.multi { align-items: flex-start; }
+
+      .bin-loc-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .result-total {
+        font-size: 11.5px;
+        color: var(--text-muted);
+        margin-top: 6px;
+        font-weight: 500;
+      }
+
+      .shelf-tile {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--card);
+        border: 1px dashed var(--gold);
+        border-radius: 10px;
+        padding: 14px 16px;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        margin-bottom: 4px;
+      }
+
+      .shelf-tile:hover { background: #fdf9ed; }
+
+      .shelf-tile-label {
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--ink);
+      }
+
+      .shelf-tile-count {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      .form-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 4px;
+      }
 
       .bin-grid {
         display: grid;
