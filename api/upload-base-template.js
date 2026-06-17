@@ -5,6 +5,20 @@ import { put } from '@vercel/blob';
 
 const BASE_TEMPLATE_PATH = 'ipacky-base-template.csv';
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf-8');
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -12,8 +26,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    // req.body will be the raw CSV text when Content-Type is text/csv
-    const csvText = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    const csvText = await readRawBody(req);
 
     if (!csvText || csvText.length < 10) {
       return res.status(400).json({ error: 'CSV content is required in the request body' });
@@ -26,7 +39,7 @@ export default async function handler(req, res) {
       contentType: 'text/csv',
     });
 
-    return res.status(200).json({ success: true, message: 'Base template updated' });
+    return res.status(200).json({ success: true, message: 'Base template updated', bytes: csvText.length });
 
   } catch (err) {
     console.error('Base template upload error:', err);
