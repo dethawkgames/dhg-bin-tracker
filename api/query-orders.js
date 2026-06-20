@@ -16,7 +16,9 @@ const SHOP = process.env.SHOPIFY_SHOP;
 const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const API_VERSION = '2025-01';
-const DATA_API_SECRET = process.env.DATA_API_SECRET;
+function getDataApiSecret() {
+  return process.env.DATA_API_SECRET;
+}
 
 let _token = null;
 let _tokenExpiresAt = 0;
@@ -67,7 +69,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const auth = req.headers['authorization'];
-  if (auth !== `Bearer ${DATA_API_SECRET}`) {
+  const expectedSecret = getDataApiSecret();
+  if (!expectedSecret || auth !== `Bearer ${expectedSecret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
