@@ -69,6 +69,17 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const auth = req.headers['authorization'];
+  if (req.query.debug === '1') {
+    const expectedSecret = getDataApiSecret();
+    return res.status(200).json({
+      hasSecret: !!expectedSecret,
+      secretLength: (expectedSecret || '').length,
+      receivedAuthHeader: auth || null,
+      expectedFullHeader: `Bearer ${expectedSecret}`,
+      match: auth === `Bearer ${expectedSecret}`,
+    });
+  }
+
   const expectedSecret = getDataApiSecret();
   if (!expectedSecret || auth !== `Bearer ${expectedSecret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
