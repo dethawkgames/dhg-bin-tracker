@@ -1,4 +1,4 @@
-# DHG Bin Tracker 
+# DHG Bin Tracker  
 
 Tracks which of your 42 storage bins hold which games, with live Shopify product search and open-order cross-referencing.
 
