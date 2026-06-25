@@ -51,6 +51,34 @@ async function getCurrentBins() {
   return data.bins || data;
 }
 
+// Derived entirely from the product's own Shopify tags - no Google Sheets/JWT
+// dependency, intentionally, since that's what broke this feature last time.
+function getSupplierSource(tags) {
+  const lower = (tags || []).map(t => t.toLowerCase());
+  if (lower.includes('asmodee')) return 'Asmodee';
+  if (lower.includes('alliance')) return 'Universal Dist';
+  // No direct Shopify tag for ACDD/Garland - this is a best-effort label,
+  // not a guarantee the item is actually in ACDD's catalog.
+  return 'ACDD (or unmapped)';
+}
+
+const RELEASE_DATE_TAG = /^release-date-(\d{4})-(\d{2})-(\d{2})$/;
+
+function getPreorderInfo(tags) {
+  for (const tag of tags || []) {
+    const m = tag.match(RELEASE_DATE_TAG);
+    if (m) {
+      const releaseDate = `${m[1]}-${m[2]}-${m[3]}`;
+      const releaseDateObj = new Date(`${releaseDate}T00:00:00Z`);
+      const today = new Date();
+      const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+      const daysUntil = Math.round((releaseDateObj - todayUTC) / (1000 * 60 * 60 * 24));
+      return { releaseDate, daysUntil };
+    }
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -76,7 +104,7 @@ export default async function handler(req, res) {
               node {
                 title
                 quantity
-                product { id }
+                product { id tags }
               }
             }
           }
@@ -104,6 +132,7 @@ export default async function handler(req, res) {
     const lineItemResults = order.lineItems.edges.map(e => {
       const item = e.node;
       const productId = item.product?.id;
+      const productTags = item.product?.tags || [];
       const locations = productId ? (productToBins[productId] || []) : [];
       return {
         title: item.title,
@@ -111,6 +140,8 @@ export default async function handler(req, res) {
         productId,
         locations,
         foundInBins: locations.length > 0,
+        supplierSource: getSupplierSource(productTags),
+        preorderInfo: getPreorderInfo(productTags),
       };
     });
 
